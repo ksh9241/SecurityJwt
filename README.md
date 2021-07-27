@@ -140,3 +140,98 @@ public class SecurityService implements UserDetailsService {
 ```
 
 개발 프로젝트 Security, Jwt 진행중.. 성공적으로 완료 시 수정할 듯.
+
+### 토큰 사용예제
+
+##### SecurityController
+```JAVA
+package kr.co.dfcc.dsrm.configuration.security;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/security")
+public class SecurityController {
+	
+	@Autowired
+	private SecurityService securityService;
+	
+	@GetMapping("/create/token") // 실제 운영에선 post방식으로 하며 매개변수는 DTO로 받아서 아이디 비밀번호 처리
+	public Map<String, Object> createToken(@RequestParam(value = "subject")String subject) {
+		String token = securityService.createToken(subject, (2* 1000 *60 )); // 2 분 설정
+		Map<String, Object> map = new LinkedHashMap<String, Object>();
+		map.put("result", token);
+		return map;
+	}
+	
+	@GetMapping("/get/subject")
+	public Map<String, Object> getSubject(@RequestParam(value = "token") String token) {
+		String subject = securityService.getSubject(token);
+		Map<String, Object> map = new LinkedHashMap<String, Object>();
+		map.put("result", subject);
+		return map;
+	}
+}
+```
+
+##### SecurityService
+```JAVA
+package kr.co.dfcc.dsrm.configuration.security;
+
+import java.security.Key;
+import java.util.Date;
+
+import javax.crypto.spec.SecretKeySpec;
+import javax.xml.bind.DatatypeConverter;
+
+import org.springframework.stereotype.Service;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+
+@Service
+public class SecurityService {
+	private static final String SECRET_KEY = "sdfhkjasdjfnkdjksznfkdjszdfszjnkfkszdj"; // 임으로 만든값 저렇게하면 안됨
+	
+	
+	// 로그인 서비스 던질 때 같이 사용
+	public String createToken(String subject, long expTime) { // expTime : 만료시간
+		if(expTime <= 0) {
+			throw new RuntimeException("만료시간이 0보다 커야함");
+		}
+		
+		SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.HS256; // 서명 알고리즘
+		
+		byte[] secretKeyBytes = DatatypeConverter.parseBase64Binary(SECRET_KEY); // 시크릿 키 바이트로 변환
+		Key signingKey = new SecretKeySpec(secretKeyBytes, signatureAlgorithm.getJcaName()); 
+		
+		return Jwts.builder()		// Jwts builder pattern
+				.setSubject(subject) // subject : userId
+				.signWith(signatureAlgorithm, secretKeyBytes)
+				.setExpiration(new Date(System.currentTimeMillis() + expTime)) // 만료시간 설정
+				.compact();
+	}
+	
+	// 토큰 검증하는 메서드임 (원래는 boolean타입으로)
+	public String getSubject(String token) {
+		//claims : payload에 담긴 정보
+		Claims claims = Jwts.parser().setSigningKey(DatatypeConverter.parseBase64Binary(SECRET_KEY)) // 암호화 시킴
+				.parseClaimsJws(token) // 생성했던 토큰 정보를 풀어줌
+				.getBody();
+		
+		return claims.getSubject();
+	}
+}
+```
+
+
+
+
